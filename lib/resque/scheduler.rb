@@ -316,6 +316,12 @@ module Resque
         handle_shutdown do
           begin
             poll_sleep_loop
+            handle_signals
+          rescue Interrupt
+            if @shutdown
+              Resque.clean_schedules
+              release_master_lock!
+            end
           ensure
             @sleeping = false
           end
@@ -333,12 +339,6 @@ module Resque
           begin
             sleep(remaining_sleep)
             handle_signals
-          rescue Interrupt
-            if @shutdown
-              Resque.clean_schedules
-              release_master_lock!
-            end
-            break
           end
         end
       end

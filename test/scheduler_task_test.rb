@@ -37,4 +37,32 @@ context 'Resque::Scheduler' do
     Resque::Scheduler.unstub(:release_master_lock!)
     Resque::Scheduler.release_master_lock!
   end
+
+  test 'sending TERM to scheduler shuts down even if poll_sleep_amount==0' do
+    begin
+      old_sleep_amount, Resque::Scheduler.poll_sleep_amount = \
+        Resque::Scheduler.poll_sleep_amount, 0
+
+      Resque::Scheduler.expects(:release_master_lock!)
+
+      @pid = Process.pid
+      Thread.new do
+        # wait until the underlying thread is alive
+        100.times do
+          break if Resque::Scheduler.instance_exec { @th && @th.alive? }
+          Thread.pass
+        end
+        Process.kill(:TERM, @pid)
+      end
+
+      assert_raises SystemExit do
+        Resque::Scheduler.run
+      end
+
+      Resque::Scheduler.unstub(:release_master_lock!)
+      Resque::Scheduler.release_master_lock!
+    ensure
+      Resque::Scheduler.poll_sleep_amount = old_sleep_amount
+    end
+  end
 end
