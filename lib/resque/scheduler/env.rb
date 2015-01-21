@@ -36,9 +36,44 @@ module Resque
       end
 
       def setup_pid_file
-        File.open(options[:pidfile], 'w') do |f|
-          f.puts $PROCESS_ID
-        end if options[:pidfile]
+        # File.open(options[:pidfile], 'w') do |f|
+        #   f.puts $PROCESS_ID
+        # end if options[:pidfile]
+        manage_pidfile(options[:pidfile])
+      end
+      def manage_pidfile(pidfile)
+        return unless pidfile
+        pid = Process.pid
+        if File.exist? pidfile
+          if process_still_running? pidfile
+            raise "Pidfile already exists at #{pidfile} and process is still running."
+          else
+            File.delete pidfile
+          end
+        else
+          FileUtils.mkdir_p File.dirname(pidfile)
+        end
+        File.open pidfile, "w" do |f|
+          f.write pid
+        end
+        at_exit do
+          if Process.pid == pid
+            File.delete pidfile
+          end
+        end
+      end
+
+      def process_still_running?(pidfile)
+        old_pid = open(pidfile).read.strip.to_i
+        Process.kill 0, old_pid
+        true
+      rescue Errno::ESRCH
+        false
+      rescue Errno::EPERM
+        true
+      rescue ::Exception => e
+        $stderr.puts "While checking if PID #{old_pid} is running, unexpected #{e.class}: #{e}"
+        true
       end
 
       def setup_scheduler_configuration
